@@ -3,12 +3,14 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
+import pandas as pd
 
 app = Flask(__name__)
 
+# Load model ML
 model = load_model('best_model.h5', compile=False)
 
-# Daftar label kelas sesuai urutan output model
+# Label kelas
 labels = [
     "bibimbap", "caesar_salad", "chicken_curry", "club_sandwich", "dumplings", "eggs_benedict",
     "falafel", "fried_rice", "grilled_salmon", "hamburger", "lasagna", "miso_soup",
@@ -18,7 +20,7 @@ labels = [
     "pancakes", "pizza", "red_velvet_cake", "spring_rolls", "tacos", "tiramisu"
 ]
 
-# Status nutrisi tiap label
+# Status nutrisi per label
 nutrition_labels = {
     "bibimbap": "Seimbang", "caesar_salad": "Seimbang", "chicken_curry": "Seimbang", "club_sandwich": "Seimbang",
     "dumplings": "Seimbang", "eggs_benedict": "Seimbang", "falafel": "Seimbang", "fried_rice": "Seimbang",
@@ -33,6 +35,20 @@ nutrition_labels = {
     "tacos": "Tidak_seimbang", "tiramisu": "Tidak_seimbang"
 }
 
+# Dictionary untuk menyimpan data gizi
+nutrition_dict = {}
+
+def load_nutrition_data():
+    global nutrition_dict
+    df = pd.read_csv('nutrition_summaryy.csv')
+    df.columns = df.columns.str.strip().str.lower()  # normalisasi nama kolom
+
+    # Kolom yang kita perlukan: 'food', 'calories (kcal)', 'fat (g)', 'carbs (g)', 'protein (g)'
+    df['food'] = df['food'].str.strip().str.lower()
+    nutrition_dict = df.set_index('food').to_dict(orient='index')
+
+load_nutrition_data()
+
 @app.route('/test', methods=['GET'])
 def home():
     return "hello world"
@@ -44,45 +60,35 @@ def predict():
     
     file = request.files['file']
     try:
-        # Buka dan preprocess gambar
+        # Preprocess image
         img = Image.open(file.stream).convert("RGB")
         img = img.resize((224, 224))
         img_array = image.img_to_array(img)
-        img_array = np.expand_dims(img_array, axis=0)
-        img_array = img_array / 255.0
+        img_array = np.expand_dims(img_array, axis=0) / 255.0
 
-        # Prediksi
+        # Predict
         prediction = model.predict(img_array)
-
-        # Debug tipe dan isi prediction
-        print("type(prediction):", type(prediction))
-        print("prediction:", prediction)
-
-        # Jika output model berupa list (multi-output), ambil output pertama
         if isinstance(prediction, list):
             prediction = prediction[0]
-
-        # Pastikan prediction adalah numpy array
         prediction = np.array(prediction)
-
-        print("prediction shape:", prediction.shape)
-        print("prediction[0]:", prediction[0])
-
-        # Flatten prediksi untuk urutkan confidence tertinggi
         preds_flat = prediction[0].flatten()
-
-        # Ambil 3 indeks dengan confidence tertinggi
         top_3_indices = preds_flat.argsort()[-3:][::-1]
 
-        # Buat list prediksi top 3
-        top_3 = [
-            {
-                "label": labels[i],
+        top_3 = []
+        for i in top_3_indices:
+            label = labels[i]
+            nutrition = nutrition_dict.get(label.lower(), {})
+            top_3.append({
+                "label": label,
                 "confidence": float(preds_flat[i]),
-                "nutrition_status": nutrition_labels.get(labels[i], "Tidak diketahui")
-            }
-            for i in top_3_indices
-        ]
+                "nutrition_status": nutrition_labels.get(label, "Tidak diketahui"),
+                "nutrition": {
+                    "kalori": nutrition.get("calories (kcal)", None),
+                    "lemak": nutrition.get("fat (g)", None),
+                    "karbohidrat": nutrition.get("carbs (g)", None),
+                    "protein": nutrition.get("protein (g)", None)
+                }
+            })
 
         return jsonify({'top_predictions': top_3})
 
