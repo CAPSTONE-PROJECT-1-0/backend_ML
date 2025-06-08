@@ -57,6 +57,14 @@ def predict():
         return jsonify({'error': 'Missing Authorization token'}), 401
 
     file = request.files['file']
+    
+    # Get user info from form data
+    user_email = request.form.get('userEmail')
+    user_name = request.form.get('userName')
+    
+    if not user_email and not user_name:
+        return jsonify({'error': 'User information required'}), 400
+
     try:
         # Preprocess image
         img = Image.open(file.stream).convert("RGB")
@@ -88,12 +96,14 @@ def predict():
         # Simpan gambar ke hosting (contoh: ke lokal folder static)
         image_filename = f"static/uploads/{label}_{np.random.randint(10000)}.jpg"
         img.save(image_filename)
-        image_url = f"https://backendml-production-23c3.up.railway.app/{image_filename}"  # sesuaikan dengan domain Flask kamu
+        image_url = f"https://backendml-production-23c3.up.railway.app/{image_filename}"
 
-        # Kirim ke HAPI.js
+        # Kirim ke HAPI.js dengan informasi user
         payload = {
+            "email": user_email,
+            "name": user_name,
             "imageUrl": image_url,
-            "analysisResult": label,
+            "analysisResult": result,  # Kirim seluruh result object
             "recommendation": result["nutrition_status"]
         }
 
@@ -109,6 +119,7 @@ def predict():
 
         if response.status_code != 201:
             print("Failed to send to Hapi.js:", response.text)
+            print("Payload sent:", payload)
 
         return jsonify({
             "status": "success",
