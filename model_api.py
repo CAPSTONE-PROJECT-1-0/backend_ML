@@ -1,24 +1,28 @@
 from flask import Flask, request, jsonify
+import requests
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
-import numpy as np
 from PIL import Image
+import numpy as np
+import pandas as pd
+import os
+from flask_cors import CORS
 
 app = Flask(__name__)
 
+CORS(app, supports_credentials=True, origins=["https://becapstone-npc01011309-tu16d9a1.leapcell.dev", "https://frontend-chi-bice-27.vercel.app" ])  
+
+# Load model
 model = load_model('best_model.h5', compile=False)
 
-# Daftar label kelas sesuai urutan output model
+# Labels
 labels = [
-    "bibimbap", "caesar_salad", "chicken_curry", "club_sandwich", "dumplings", "eggs_benedict",
-    "falafel", "fried_rice", "grilled_salmon", "hamburger", "lasagna", "miso_soup",
-    "omelette", "pho", "ramen", "spaghetti_bolognese", "steak", "sushi", "sashimi",
-    "apple_pie", "cheesecake", "chicken_wings", "chocolate_mousse", "churros", "fish_and_chips",
-    "french_fries", "fried_calamari", "garlic_bread", "ice_cream", "macaroni_and_cheese",
-    "pancakes", "pizza", "red_velvet_cake", "spring_rolls", "tacos", "tiramisu"
+    "apple_pie", "bibimbap", "caesar_salad", "cheesecake", "chicken_curry", "chicken_wings",  "chocolate_mousse", "churros", "club_sandwich", "dumplings", "eggs_benedict", "falafel",
+    "fish_and_chips", "french_fries", "fried_calamari", "fried_rice", "garlic_bread",   "grilled_salmon", "hamburger", "ice_cream", "lasagna", "macaroni_and_cheese", "miso_soup",
+    "omelette", "pancakes", "pho", "pizza", "ramen", "red_velvet_cake", "sashimi",   "spaghetti_bolognese", "spring_rolls", "steak", "sushi", "tacos", "tiramisu"
 ]
 
-# Status nutrisi tiap label
+# Nutrition labels
 nutrition_labels = {
     "bibimbap": "Seimbang", "caesar_salad": "Seimbang", "chicken_curry": "Seimbang", "club_sandwich": "Seimbang",
     "dumplings": "Seimbang", "eggs_benedict": "Seimbang", "falafel": "Seimbang", "fried_rice": "Seimbang",
@@ -33,62 +37,92 @@ nutrition_labels = {
     "tacos": "Tidak_seimbang", "tiramisu": "Tidak_seimbang"
 }
 
-@app.route('/test', methods=['GET'])
-def home():
-    return "hello world"
+# Nutrition data
+nutrition_dict = {}
+def load_nutrition_data():
+    global nutrition_dict
+    df = pd.read_csv('nutrition_summaryy.csv')
+    df.columns = df.columns.str.strip().str.lower()
+    df['food'] = df['food'].str.strip().str.lower()
+    nutrition_dict = df.set_index('food').to_dict(orient='index')
+load_nutrition_data()
 
 @app.route('/predict', methods=['POST'])
 def predict():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
-    
+
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'error': 'Missing Authorization token'}), 401
+
     file = request.files['file']
     try:
-        # Buka dan preprocess gambar
+        # Preprocess image
         img = Image.open(file.stream).convert("RGB")
-        img = img.resize((224, 224))
-        img_array = image.img_to_array(img)
-        img_array = np.expand_dims(img_array, axis=0)
-        img_array = img_array / 255.0
+        img_resized = img.resize((224, 224))
+        img_array = image.img_to_array(img_resized)
+        img_array = np.expand_dims(img_array, axis=0) / 255.0
 
-        # Prediksi
+        # Predict
         prediction = model.predict(img_array)
-
-        # Debug tipe dan isi prediction
-        print("type(prediction):", type(prediction))
-        print("prediction:", prediction)
-
-        # Jika output model berupa list (multi-output), ambil output pertama
-        if isinstance(prediction, list):
-            prediction = prediction[0]
-
-        # Pastikan prediction adalah numpy array
         prediction = np.array(prediction)
-
-        print("prediction shape:", prediction.shape)
-        print("prediction[0]:", prediction[0])
-
-        # Flatten prediksi untuk urutkan confidence tertinggi
         preds_flat = prediction[0].flatten()
+        top_index = preds_flat.argmax()
+        label = labels[top_index]
+        confidence = float(preds_flat[top_index])
+        nutrition = nutrition_dict.get(label.lower(), {})
 
-        # Ambil 3 indeks dengan confidence tertinggi
-        top_3_indices = preds_flat.argsort()[-3:][::-1]
-
-        # Buat list prediksi top 3
-        top_3 = [
-            {
-                "label": labels[i],
-                "confidence": float(preds_flat[i]),
-                "nutrition_status": nutrition_labels.get(labels[i], "Tidak diketahui")
+        result = {
+            "label": label,
+            "confidence": confidence,
+            "nutrition_status": nutrition_labels.get(label, "Tidak diketahui"),
+            "nutrition": {
+                "kalori": nutrition.get("calories (kcal)"),
+                "lemak": nutrition.get("fat (g)"),
+                "karbohidrat": nutrition.get("carbs (g)"),
+                "protein": nutrition.get("protein (g)")
             }
-            for i in top_3_indices
-        ]
+        }
 
-        return jsonify({'top_predictions': top_3})
+        # Simpan gambar ke hosting (contoh: ke lokal folder static)
+        image_filename = f"static/uploads/{label}_{np.random.randint(10000)}.jpg"
+        img.save(image_filename)
+        image_url = f"https://backendml-production-23c3.up.railway.app/{image_filename}"  # sesuaikan dengan domain Flask kamu
+
+        # Kirim ke HAPI.js
+        payload = {
+            "imageUrl": image_url,
+            "analysisResult": label,
+            "recommendation": result["nutrition_status"]
+        }
+
+        # Kirim token yang sama ke HAPI.js
+        headers = {
+            "Authorization": token,
+            "Content-Type": "application/json"
+        }
+
+        # Kirim POST ke Hapi.js
+        hapi_url = "https://becapstone-npc01011309-tu16d9a1.leapcell.dev/upload-history"
+        response = requests.post(hapi_url, json=payload, headers=headers)
+
+        if response.status_code != 201:
+            print("Failed to send to Hapi.js:", response.text)
+
+        return jsonify({
+            "status": "success",
+            "prediction": result,
+            "image_url": image_url
+        })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/test', methods=['GET'])
+def test():
+    return "API OK"
 
 if __name__ == '__main__':
+    os.makedirs('static/uploads', exist_ok=True)
     app.run(host="0.0.0.0", port=8080, debug=True)

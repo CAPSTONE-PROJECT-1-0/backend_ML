@@ -3,3 +3,5 @@ flask
 numpy
 Pillow
 gunicorn
+pandas
+flask-cors
