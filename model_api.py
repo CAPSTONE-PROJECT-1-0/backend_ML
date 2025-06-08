@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import os
 from flask_cors import CORS
+import json
 
 app = Flask(__name__)
 
@@ -131,7 +132,7 @@ def predict():
             "email": user_email,
             "name": user_name,
             "imageUrl": image_url,
-            "analysisResult": jsonify(result),
+            "analysisResult": json.dumps(result),
             "recommendation": result["nutrition_status"]
         }
 
