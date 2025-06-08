@@ -10,19 +10,26 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
-CORS(app, supports_credentials=True, origins=["https://becapstone-npc01011309-tu16d9a1.leapcell.dev", "https://frontend-chi-bice-27.vercel.app" ])  
+# Setup CORS untuk domain frontend & Hapi.js
+CORS(app, supports_credentials=True, origins=[
+    "https://becapstone-npc01011309-tu16d9a1.leapcell.dev",
+    "https://frontend-chi-bice-27.vercel.app"
+])
 
 # Load model
 model = load_model('best_model.h5', compile=False)
 
 # Labels
 labels = [
-    "apple_pie", "bibimbap", "caesar_salad", "cheesecake", "chicken_curry", "chicken_wings",  "chocolate_mousse", "churros", "club_sandwich", "dumplings", "eggs_benedict", "falafel",
-    "fish_and_chips", "french_fries", "fried_calamari", "fried_rice", "garlic_bread",   "grilled_salmon", "hamburger", "ice_cream", "lasagna", "macaroni_and_cheese", "miso_soup",
-    "omelette", "pancakes", "pho", "pizza", "ramen", "red_velvet_cake", "sashimi",   "spaghetti_bolognese", "spring_rolls", "steak", "sushi", "tacos", "tiramisu"
+    "apple_pie", "bibimbap", "caesar_salad", "cheesecake", "chicken_curry", "chicken_wings",
+    "chocolate_mousse", "churros", "club_sandwich", "dumplings", "eggs_benedict", "falafel",
+    "fish_and_chips", "french_fries", "fried_calamari", "fried_rice", "garlic_bread",
+    "grilled_salmon", "hamburger", "ice_cream", "lasagna", "macaroni_and_cheese", "miso_soup",
+    "omelette", "pancakes", "pho", "pizza", "ramen", "red_velvet_cake", "sashimi",
+    "spaghetti_bolognese", "spring_rolls", "steak", "sushi", "tacos", "tiramisu"
 ]
 
-# Nutrition labels
+# Nutrition status labels
 nutrition_labels = {
     "bibimbap": "Seimbang", "caesar_salad": "Seimbang", "chicken_curry": "Seimbang", "club_sandwich": "Seimbang",
     "dumplings": "Seimbang", "eggs_benedict": "Seimbang", "falafel": "Seimbang", "fried_rice": "Seimbang",
@@ -37,7 +44,7 @@ nutrition_labels = {
     "tacos": "Tidak_seimbang", "tiramisu": "Tidak_seimbang"
 }
 
-# Nutrition data
+# Load nutrition data
 nutrition_dict = {}
 def load_nutrition_data():
     global nutrition_dict
@@ -57,11 +64,9 @@ def predict():
         return jsonify({'error': 'Missing Authorization token'}), 401
 
     file = request.files['file']
-    
-    # Get user info from form data
     user_email = request.form.get('userEmail')
     user_name = request.form.get('userName')
-    
+
     if not user_email and not user_name:
         return jsonify({'error': 'User information required'}), 400
 
@@ -72,13 +77,11 @@ def predict():
         img_array = image.img_to_array(img_resized)
         img_array = np.expand_dims(img_array, axis=0) / 255.0
 
-        # Predict
-        prediction = model.predict(img_array)
-        prediction = np.array(prediction)
-        preds_flat = prediction[0].flatten()
-        top_index = preds_flat.argmax()
+        # Predict (fix section)
+        prediction = model.predict(img_array)[0]
+        top_index = prediction.argmax()
         label = labels[top_index]
-        confidence = float(preds_flat[top_index])
+        confidence = float(prediction[top_index])
         nutrition = nutrition_dict.get(label.lower(), {})
 
         result = {
@@ -93,27 +96,25 @@ def predict():
             }
         }
 
-        # Simpan gambar ke hosting (contoh: ke lokal folder static)
+        # Simpan gambar ke server
         image_filename = f"static/uploads/{label}_{np.random.randint(10000)}.jpg"
         img.save(image_filename)
         image_url = f"https://backendml-production-23c3.up.railway.app/{image_filename}"
 
-        # Kirim ke HAPI.js dengan informasi user
+        # Kirim ke Hapi.js
         payload = {
             "email": user_email,
             "name": user_name,
             "imageUrl": image_url,
-            "analysisResult": result,  # Kirim seluruh result object
+            "analysisResult": result,
             "recommendation": result["nutrition_status"]
         }
 
-        # Kirim token yang sama ke HAPI.js
         headers = {
             "Authorization": token,
             "Content-Type": "application/json"
         }
 
-        # Kirim POST ke Hapi.js
         hapi_url = "https://becapstone-npc01011309-tu16d9a1.leapcell.dev/upload-history"
         response = requests.post(hapi_url, json=payload, headers=headers)
 
