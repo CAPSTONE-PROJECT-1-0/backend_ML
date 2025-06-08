@@ -64,12 +64,18 @@ def predict():
         return jsonify({'error': 'Missing Authorization token'}), 401
 
     file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
 
-    user_email = request.form.get('userEmail')
-    user_name = request.form.get('userName')
+    # Ambil user info dari form data atau headers
+    user_email = request.form.get('userEmail') or request.headers.get('x-user-email')
+    user_name = request.form.get('userName') or request.headers.get('x-user-name')
 
     if not user_email or not user_name:
-        return jsonify({'error': 'User information required'}), 400
+        return jsonify({
+            'error': 'User information required',
+            'details': 'Both userEmail and userName must be provided'
+        }), 400
 
     try:
         # Preprocess image
