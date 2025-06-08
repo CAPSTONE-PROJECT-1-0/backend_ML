@@ -64,11 +64,11 @@ def predict():
         return jsonify({'error': 'Missing Authorization token'}), 401
 
     file = request.files['file']
-    
+
     user_email = request.form.get('userEmail')
     user_name = request.form.get('userName')
-    
-    if not user_email and not user_name:
+
+    if not user_email or not user_name:
         return jsonify({'error': 'User information required'}), 400
 
     try:
@@ -79,12 +79,19 @@ def predict():
         img_array = np.expand_dims(img_array, axis=0) / 255.0
 
         # Predict
-        prediction = model.predict(img_array)
-        prediction = prediction[0]  # karena shape-nya (1, N)
-        
-        if len(prediction) != len(labels):
+        prediction = model.predict(img_array)  # Output biasanya shape (1, num_classes)
+        print("DEBUG: prediction shape", prediction.shape)
+        print("DEBUG: prediction content", prediction)
+
+        # Pastikan prediction berbentuk (1, 36)
+        if prediction.ndim == 2 and prediction.shape[1] == len(labels):
+            prediction = prediction[0]  # Ambil batch pertama
+        elif prediction.ndim == 1 and len(prediction) == len(labels):
+            # Jika sudah 1D tapi panjang sesuai label, langsung gunakan
+            pass
+        else:
             return jsonify({
-                'error': f'Prediction size {len(prediction)} does not match number of labels {len(labels)}.'
+                'error': f'Prediction size {prediction.size} does not match number of labels {len(labels)}.'
             }), 500
 
         top_index = np.argmax(prediction)
@@ -138,6 +145,7 @@ def predict():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 @app.route('/test', methods=['GET'])
