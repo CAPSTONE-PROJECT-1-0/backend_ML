@@ -131,7 +131,7 @@ def predict():
             "email": user_email,
             "name": user_name,
             "imageUrl": image_url,
-            "analysisResult": jsonif(yresult),
+            "analysisResult": jsonify(result),
             "recommendation": result["nutrition_status"]
         }
 
