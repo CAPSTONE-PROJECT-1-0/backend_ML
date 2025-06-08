@@ -130,8 +130,8 @@ def predict():
             "email": user_email,
             "name": user_name,
             "imageUrl": image_url,
-            "analysisResult": result,
-            "recommendation": result["nutrition_status"]
+            "analysisResult": jsonify(result),
+            "recommendation": jsonify(result["nutrition_status"])
         }
 
         headers = {
