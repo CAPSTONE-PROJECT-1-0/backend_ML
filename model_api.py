@@ -10,6 +10,7 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
+
 # Setup CORS untuk domain frontend & Hapi.js
 CORS(app, supports_credentials=True, origins=[
     "https://becapstone-npc01011309-tu16d9a1.leapcell.dev",
@@ -130,8 +131,8 @@ def predict():
             "email": user_email,
             "name": user_name,
             "imageUrl": image_url,
-            "analysisResult": jsonify(result),
-            "recommendation": jsonify(result["nutrition_status"])
+            "analysisResult": result,
+            "recommendation": result["nutrition_status"]
         }
 
         headers = {

@@ -5,3 +5,4 @@ Pillow
 gunicorn
 pandas
 flask-cors
+minio
