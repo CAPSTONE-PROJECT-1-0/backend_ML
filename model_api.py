@@ -86,19 +86,22 @@ def predict():
 
         # Predict
         prediction = model.predict(img_array)  # Output biasanya shape (1, num_classes)
-        print("DEBUG: prediction shape", prediction.shape)
+        # print(prediction)
+        # print("DEBUG: prediction shape", prediction.shape)
         print("DEBUG: prediction content", prediction)
+        prediction = prediction[0][0]  # Ambil batch pertama
 
         # Pastikan prediction berbentuk (1, 36)
-        if prediction.ndim == 2 and prediction.shape[1] == len(labels):
-            prediction = prediction[0]  # Ambil batch pertama
-        elif prediction.ndim == 1 and len(prediction) == len(labels):
-            # Jika sudah 1D tapi panjang sesuai label, langsung gunakan
-            pass
-        else:
-            return jsonify({
-                'error': f'Prediction size {prediction.size} does not match number of labels {len(labels)}.'
-            }), 500
+        # if prediction.ndim == 2 and prediction.shape[1] == len(labels):
+        # if prediction.ndim == 2:
+        #     prediction = prediction[0]  # Ambil batch pertama
+        # elif prediction.ndim == 1 and len(prediction) == len(labels):
+        #     # Jika sudah 1D tapi panjang sesuai label, langsung gunakan
+        #     pass
+        # else:
+        #     return jsonify({
+        #         'error': f'Prediction size {prediction.size} does not match number of labels {len(labels)}.'
+        #     }), 500
 
         top_index = np.argmax(prediction)
         label = labels[top_index]
