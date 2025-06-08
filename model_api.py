@@ -64,9 +64,10 @@ def predict():
         return jsonify({'error': 'Missing Authorization token'}), 401
 
     file = request.files['file']
+    
     user_email = request.form.get('userEmail')
     user_name = request.form.get('userName')
-
+    
     if not user_email and not user_name:
         return jsonify({'error': 'User information required'}), 400
 
@@ -77,9 +78,16 @@ def predict():
         img_array = image.img_to_array(img_resized)
         img_array = np.expand_dims(img_array, axis=0) / 255.0
 
-        # Predict (fix section)
-        prediction = model.predict(img_array)[0]
-        top_index = prediction.argmax()
+        # Predict
+        prediction = model.predict(img_array)
+        prediction = prediction[0]  # karena shape-nya (1, N)
+        
+        if len(prediction) != len(labels):
+            return jsonify({
+                'error': f'Prediction size {len(prediction)} does not match number of labels {len(labels)}.'
+            }), 500
+
+        top_index = np.argmax(prediction)
         label = labels[top_index]
         confidence = float(prediction[top_index])
         nutrition = nutrition_dict.get(label.lower(), {})
@@ -96,12 +104,12 @@ def predict():
             }
         }
 
-        # Simpan gambar ke server
+        # Save image
         image_filename = f"static/uploads/{label}_{np.random.randint(10000)}.jpg"
         img.save(image_filename)
         image_url = f"https://backendml-production-23c3.up.railway.app/{image_filename}"
 
-        # Kirim ke Hapi.js
+        # Send to HAPI
         payload = {
             "email": user_email,
             "name": user_name,
@@ -130,6 +138,7 @@ def predict():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/test', methods=['GET'])
 def test():
